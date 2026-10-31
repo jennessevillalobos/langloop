@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#09090b" />
+  <title>LangLoop · AI Voice Simulator</title>
+
+  <!-- Tailwind CSS (Play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { neon: '#8B5CF6', mint: '#10B981' },
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+        }
+      }
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ===== Estilos personalizados (animaciones que Tailwind no trae por defecto) ===== */
+    html, body { background: #09090b; }
+    body { -webkit-tap-highlight-color: transparent; }
+
+    /* Fondo con brillos suaves */
+    .glow-bg::before, .glow-bg::after {
+      content: ''; position: fixed; border-radius: 9999px; filter: blur(90px);
+      pointer-events: none; z-index: 0; opacity: .35;
+    }
+    .glow-bg::before { width: 420px; height: 420px; background: #8B5CF6; top: -160px; left: -140px; }
+    .glow-bg::after  { width: 360px; height: 360px; background: #10B981; bottom: -180px; right: -120px; opacity: .18; }
+
+    /* Scroll fino en el chat */
+    .thin-scroll::-webkit-scrollbar { width: 6px; }
+    .thin-scroll::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 9999px; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { scrollbar-width: none; }
+
+    /* Entrada de burbujas */
+    @keyframes bubbleIn { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+    .bubble-in { animation: bubbleIn .35s cubic-bezier(.2,.8,.2,1) both; }
+
+    /* Indicador "escribiendo..." */
+    @keyframes blink { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+    .dot { width: 6px; height: 6px; border-radius: 9999px; background: #a1a1aa; animation: blink 1.2s infinite; }
+    .dot:nth-child(2) { animation-delay: .15s; } .dot:nth-child(3) { animation-delay: .3s; }
+
+    /* Anillos pulsantes del micrófono */
+    @keyframes ring { 0% { transform: scale(1); opacity: .55; } 100% { transform: scale(1.85); opacity: 0; } }
+    .mic-ring { position: absolute; inset: 0; border-radius: 9999px; opacity: 0; pointer-events: none; }
+    .listening .mic-ring { background: rgba(16,185,129,.45); animation: ring 1.8s cubic-bezier(.2,.6,.4,1) infinite; }
+    .listening .mic-ring:nth-child(2) { animation-delay: .6s; }
+    .listening .mic-ring:nth-child(3) { animation-delay: 1.2s; }
+
+    /* "Tu turno": brillo suave cuando el mic espera al usuario */
+    @keyframes breathe { 0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,.45), 0 10px 40px -10px rgba(139,92,246,.7); }
+                         50% { box-shadow: 0 0 0 10px rgba(139,92,246,0), 0 10px 50px -8px rgba(139,92,246,.9); } }
+    .your-turn #micBtn { animation: breathe 2.4s ease-in-out infinite; }
+
+    /* Barras de onda cuando el personaje habla */
+    @keyframes wave { 0%, 100% { transform: scaleY(.35); } 50% { transform: scaleY(1); } }
+    .wave span { display: inline-block; width: 3px; height: 14px; margin: 0 1px; border-radius: 2px; background: #10B981; transform-origin: bottom; animation: wave .9s ease-in-out infinite; }
+    .wave span:nth-child(2) { animation-delay: .15s; } .wave span:nth-child(3) { animation-delay: .3s; } .wave span:nth-child(4) { animation-delay: .45s; }
+
+    /* Tarjeta de feedback y hoja de pistas (estado oculto/visible) */
+    .sheet-hidden { opacity: 0; transform: translateY(16px) scale(.98); pointer-events: none; }
+    .sheet-shown  { opacity: 1; transform: none; }
+    .sheet-anim   { transition: opacity .35s cubic-bezier(.2,.8,.2,1), transform .35s cubic-bezier(.2,.8,.2,1); }
+
+    /* Barra de tiempo de la tarjeta de feedback */
+    @keyframes shrink { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+    .timer-bar { transform-origin: left; }
+
+    /* Evita que los botones se seleccionen (resaltado azul) al tocarlos varias veces */
+    button, nav, header { -webkit-user-select: none; user-select: none; }
+
+    /* Difuminado en el borde derecho de los escenarios: indica que hay más con scroll */
+    #scenarioList { -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+
+    /* ===== Pantallas bajas (laptops con zoom, móviles horizontales, teclado abierto) ===== */
+    @media (max-height: 760px) {
+      header { padding-top: .6rem !important; padding-bottom: .5rem !important; }
+      #scenarioList { padding-bottom: .5rem; }
+      #scenarioList button { padding-top: .35rem; padding-bottom: .35rem; font-size: .8rem; }
+      #charCard { padding-top: .4rem; padding-bottom: .4rem; }
+      #charAvatar { width: 2rem; height: 2rem; font-size: 1rem; }
+      #dock { padding-top: .4rem; }
+      #micWrap, #micBtn { width: 3.75rem; height: 3.75rem; }
+      #kbBtn, #restartBtn { width: 2.6rem; height: 2.6rem; }
+      #live { height: 1.25rem; font-size: .8rem; }
+      #feedback { margin-bottom: 3.25rem; }
+      #feedback > div:first-child { max-height: 34dvh; padding: .6rem .8rem; }
+      #fbBody { margin-top: .35rem; font-size: .8rem; }
+      #fbBody > * + * { margin-top: .3rem !important; }
+      #fbBody .rounded-xl { padding-top: .25rem; padding-bottom: .25rem; }
+    }
+    @media (max-height: 560px) {
+      #charCard { display: none; }
+    }
+  </style>
+</head>
+
+<body class="h-full font-sans text-zinc-100 antialiased glow-bg">
+  <!-- ================================================================
+       CONTENEDOR PRINCIPAL (mobile-first, columna centrada en escritorio)
+       ================================================================ -->
+  <div id="app" class="relative z-10 mx-auto flex h-[100dvh] max-w-2xl flex-col md:py-4">
+    <div class="flex h-full flex-col overflow-hidden bg-zinc-950/70 backdrop-blur-xl md:rounded-3xl md:border md:border-white/10 md:shadow-2xl md:shadow-violet-950/40">
+
+      <!-- ===== ENCABEZADO ===== -->
+      <header class="flex items-center justify-between gap-3 px-4 pt-[max(0.9rem,env(safe-area-inset-top))] pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-violet-500 to-emerald-500 shadow-lg shadow-violet-600/30">
+            <!-- Logo: bucle -->
+            <svg viewBox="0 0 24 24" class="h-5 w-5 text-white" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+              <path d="M8 8a4 4 0 1 0 0 8c2.5 0 5.5-8 8-8a4 4 0 1 1 0 8c-2.5 0-5.5-8-8-8z"/>
+            </svg>
+          </div>
+          <div class="leading-tight">
+            <h1 class="text-lg font-extrabold tracking-tight">Lang<span class="bg-gradient-to-r from-violet-400 to-emerald-400 bg-clip-text text-transparent">Loop</span></h1>
+            <span class="inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-violet-300">
+              <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> AI Voice Simulator
+            </span>
+          </div>
+        </div>
+
+        <!-- Modo lento: el personaje habla más despacio -->
+        <button id="slowBtn" type="button" aria-pressed="false"
+          class="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-zinc-300 transition hover:bg-white/10">
+          🐢 <span>Lento</span>
+        </button>
+      </header>
+
+      <!-- ===== SELECTOR DE ESCENARIO ===== -->
+      <nav id="scenarioList" class="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-3" aria-label="Escenarios"></nav>
+
+      <!-- ===== TARJETA DEL PERSONAJE + PROGRESO ===== -->
+      <section id="charCard" class="mx-4 mb-2 rounded-2xl border border-white/5 bg-zinc-900/60 px-3 py-2.5">
+        <div class="flex items-center gap-3">
+          <div id="charAvatar" class="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-gradient-to-br from-zinc-700 to-zinc-800 text-xl ring-2 ring-violet-500/40">☕</div>
+          <div class="min-w-0 flex-1">
+            <p id="charName" class="truncate text-sm font-semibold">Mia</p>
+            <p id="charStatus" class="flex items-center gap-1.5 text-xs text-zinc-400">
+              <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> <span id="charStatusText">Barista</span>
+            </p>
+          </div>
+          <span id="stepLabel" class="shrink-0 text-[11px] font-medium text-zinc-500">Paso 0/0</span>
+        </div>
+        <div class="mt-2.5 h-1 overflow-hidden rounded-full bg-zinc-800">
+          <div id="progressBar" class="h-full w-0 rounded-full bg-gradient-to-r from-violet-500 to-emerald-400 transition-all duration-700"></div>
+        </div>
+      </section>
+
+      <!-- Banner de avisos (micrófono bloqueado / navegador sin soporte) -->
+      <div id="banner" class="mx-4 mb-2 hidden rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-200"></div>
+
+      <!-- ===== CHAT ===== -->
+      <main id="chat" class="thin-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-16 pt-2" aria-live="polite"></main>
+
+      <!-- ===== DOCK DE CONTROLES ===== -->
+      <footer id="dock" class="relative border-t border-white/5 bg-zinc-950/80 px-4 pt-3 backdrop-blur-xl pb-[max(1rem,env(safe-area-inset-bottom))]">
+
+        <!-- Tarjeta de Feedback / Corrección (aparece animada encima del dock) -->
+        <div id="feedback" role="status"
+          class="sheet-anim sheet-hidden absolute inset-x-3 bottom-full z-30 mb-16 overflow-hidden rounded-2xl border bg-zinc-900/95 shadow-2xl backdrop-blur-xl">
+          <div class="max-h-[45dvh] overflow-y-auto p-3.5 sm:p-4">
+            <div class="flex items-start justify-between gap-3">
+              <p id="fbTitle" class="text-sm font-bold"></p>
+              <button id="fbClose" type="button" class="-mr-1 -mt-1 rounded-lg p-1 text-zinc-500 hover:bg-white/5 hover:text-zinc-200" aria-label="Cerrar">✕</button>
+            </div>
+            <div id="fbBody" class="mt-2 space-y-2 text-sm"></div>
+          </div>
+          <div id="fbTimer" class="timer-bar h-0.5"></div>
+        </div>
+
+        <!-- Botón flotante de pista -->
+        <button id="hintBtn" type="button"
+          class="absolute bottom-full right-4 z-20 mb-3 flex items-center gap-1.5 rounded-full border border-amber-300/20 bg-zinc-900/90 px-3.5 py-2 text-sm font-semibold text-amber-200 shadow-lg shadow-black/40 backdrop-blur transition hover:-translate-y-0.5 hover:bg-zinc-800">
+          💡 ¿Qué digo?
+        </button>
+
+        <!-- Transcripción en vivo -->
+        <p id="live" class="h-6 truncate text-center text-sm text-zinc-400">Pulsa <b class="text-zinc-200">Empezar</b> para comenzar</p>
+
+        <!-- Fila de botones -->
+        <div class="mt-2 flex items-center justify-center gap-7">
+          <button id="kbBtn" type="button" title="Escribir en lugar de hablar" aria-label="Teclado"
+            class="grid h-12 w-12 place-items-center rounded-full border border-white/10 bg-white/5 text-zinc-300 transition hover:bg-white/10">
+            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>
+          </button>
+
+          <!-- Botón de micrófono principal -->
+          <div id="micWrap" class="relative h-20 w-20">
+            <span class="mic-ring"></span><span class="mic-ring"></span><span class="mic-ring"></span>
+            <button id="micBtn" type="button" aria-label="Hablar"
+              class="relative grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-xl shadow-violet-600/40 transition-all duration-300 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
+              <svg id="micIcon" viewBox="0 0 24 24" class="h-8 w-8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1M12 18v4M8 22h8"/>
+              </svg>
+              <svg id="stopIcon" viewBox="0 0 24 24" class="hidden h-7 w-7" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="3"/></svg>
+              <span id="waveIcon" class="wave hidden"><span></span><span></span><span></span><span></span></span>
+            </button>
+          </div>
+
+          <button id="restartBtn" type="button" title="Reiniciar conversación" aria-label="Reiniciar"
+            class="grid h-12 w-12 place-items-center rounded-full border border-white/10 bg-white/5 text-zinc-300 transition hover:bg-white/10">
+            <svg viewBox="0 0 24 24" class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+          </button>
+        </div>
+
+        <!-- Entrada de texto alternativa -->
+        <form id="textForm" class="mt-3 hidden gap-2">
+          <input id="textInput" type="text" autocomplete="off" placeholder="Type your answer in English…"
+            class="min-w-0 flex-1 rounded-xl border border-white/10 bg-zinc-900 px-3.5 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:border-violet-500/60 focus:ring-2 focus:ring-violet-500/20" />
+          <button type="submit" class="rounded-xl bg-violet-600 px-4 text-sm font-semibold text-white transition hover:bg-violet-500">Enviar</button>
+        </form>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ===== HOJA DE PISTAS ("¿Qué digo?") ===== -->
+  <div id="hintOverlay" class="sheet-anim sheet-hidden fixed inset-0 z-40 flex items-end justify-center bg-black/60 p-3 backdrop-blur-sm md:items-center">
+    <div class="w-full max-w-lg rounded-3xl border border-white/10 bg-zinc-900 p-5 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <h2 class="text-base font-bold">💡 ¿Qué puedo decir?</h2>
+        <button id="hintClose" type="button" class="rounded-lg p-1 text-zinc-500 hover:bg-white/5 hover:text-zinc-200" aria-label="Cerrar">✕</button>
+      </div>
+      <div id="hintQuestion" class="mt-3 rounded-xl bg-zinc-800/60 p-3 text-sm"></div>
+      <p class="mt-4 text-xs font-semibold uppercase tracking-wider text-zinc-500">Respuestas sugeridas · toca 🔊 para escuchar</p>
+      <ul id="hintList" class="mt-2 space-y-2"></ul>
+      <p class="mt-4 text-center text-xs text-zinc-500">Ahora cierra esto y dilo en voz alta. ¡Tú puedes! 💜</p>
+    </div>
+  </div>
+
+  <!-- Toast (mensajes breves) -->
+  <div id="toast" class="sheet-anim sheet-hidden fixed left-1/2 top-4 z-50 -translate-x-1/2 rounded-full border border-white/10 bg-zinc-800/95 px-4 py-2 text-sm text-zinc-100 shadow-xl backdrop-blur"></div>
+
+<script>
+/* =====================================================================
+   LangLoop — Simulador de conversación por voz en inglés
+   100% local: Web Speech API (reconocimiento + síntesis), sin APIs de pago.
+   ===================================================================== */
+
+/* ---------------------------------------------------------------
+   1. UTILIDADES
+   --------------------------------------------------------------- */
+const $ = (id) => document.getElementById(id);
+
+/** Normaliza lo que dijo el usuario: minúsculas, sin puntuación, apóstrofes unificados. */
+const norm = (t) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  .replace(/[’`´]/g, "'")
+  .replace(/[^a-z0-9'\s]/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const cap = (w) => w ? w.charAt(0).toUpperCase() + w.slice(1) : w;
+const money = (n) => `$${n.toFixed(2)}`;
+const article = (w) => /^[aeiou]/i.test(w) ? 'an' : 'a';
+
+const NUM_WORDS = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, fifteen: 15, twenty: 20, thirty: 30, couple: 2, few: 3 };
+
+/** Extrae un número (dígitos o palabra) de una frase. */
+function parseNumber(t) {
+  const d = t.match(/\b(\d+)\b/);
+  if (d) return parseInt(d[1], 10);
+  const w = t.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|couple|few|a|an)\b(?= (?:of )?(?:night|day|week|month))/);
+  return w ? NUM_WORDS[w[1]] : null;
+}
+
+const YES_RE = /\b(yes|yeah|yep|yup|sure|of course|please|i do|i'd love|ok|okay|absolutely|definitely|sounds good|why not|i have)\b/;
+const NO_RE = /\b(no|nope|nah|nothing|not really|don't|do not|i'm good|that's all|that's it|no thanks)\b/;
+const REPEAT_RE = /\b(repeat|pardon|say that again|one more time|slowly|slower|didn't understand|don't understand|what did you say)\b/;
+
+/** Extrae un nombre de frases como "my name is Ana", "it's Carlos" o simplemente "Laura". */
+function pickName(t) {
+  // Se prueban en orden: "under the name X" tiene prioridad sobre "it's X"
+  const patterns = [/under (?:the name )?(?:of )?([a-z]+)/, /(?:name is|name's|call me)\s+([a-z]+)/, /(?:it's|it is|i'm|i am|this is)\s+([a-z]+)/];
+  for (const p of patterns) {
+    const m = t.match(p);
+    if (m && !['a', 'the', 'my', 'sure', 'under', 'from', 'here'].includes(m[1])) return cap(m[1]);
+  }
+  const skip = ['sure', 'yes', 'yeah', 'okay', 'ok', 'um', 'uh', 'its', "it's", 'please', 'name', 'the', 'is', 'my', 'of', 'course'];
+  const words = t.split(' ').filter((w) => w && !skip.includes(w));
+  return cap(words[words.length - 1] || 'friend');
+}
+
+/* ---------------------------------------------------------------
+   2. ÁRBOLES DE CONVERSACIÓN POR ESCENARIO
+   Cada nodo:
+     say(s)   -> frase del personaje (s = variables de la sesión)
+     es(s)    -> traducción al español
+     hints    -> [inglés, español] respuestas sugeridas
+     routes   -> [{ match: RegExp | any: true, act(s,t), to | reply+stay }]
+     retry    -> qué dice el personaje si no entiende
+     end      -> nodo final
+   --------------------------------------------------------------- */
+const DRINK_RE = /(black coffee|coffee black|iced coffee|cold brew|flat white|hot chocolate|latte|cappuccino|americano|espresso|mocha|macchiato|chai|tea|coffee)/;
+const SIZE_RE = /\b(small|medium|large|tall|grande|venti|regular|big)\b/;
+const SIZE_MAP = { tall: 'small', grande: 'medium', venti: 'large', regular: 'medium', big: 'large' };
+const PRICES = { small: 3.75, medium: 4.5, large: 5.25 };
+
+function pickDrink(t) {
+  if (/black coffee|coffee black/.test(t)) return 'black coffee';
+  const m = t.match(DRINK_RE);
+  return m ? m[1] : 'coffee';
+}
+function pickSize(t) {
+  const m = t.match(SIZE_RE);
+  return m ? (SIZE_MAP[m[1]] || m[1]) : null;
+}
+const coffeePrice = (s) => (PRICES[s.size] || 4.5) + (s.extra ? 0.75 : 0);
+
+const SCENARIOS = {
+  /* ☕ ------------------------------------------------------------ */
+  coffee: {
+    emoji: '☕', title: 'Ordering Coffee in NYC',
+    intro: 'Estás en una cafetería de Brooklyn. Pide tu bebida, elige el tamaño, da tu nombre y paga.',
+    character: { name: 'Mia', role: 'Barista · Brooklyn Beans', emoji: '👩🏽‍🍳', pitch: 1.12 },
+    start: 'greet',
+    order: ['greet', 'size', 'extras', 'name', 'pay', 'done'],
+    nodes: {
+      greet: {
+        say: () => "Hi there! Welcome to Brooklyn Beans. What can I get started for you today?",
+        es: () => '¡Hola! Bienvenido a Brooklyn Beans. ¿Qué te preparo hoy?',
+        hints: [['Can I get a latte, please?', '¿Me das un latte, por favor?'],
+                ["I'd like a large black coffee.", 'Quisiera un café negro grande.'],
+                ['What do you recommend?', '¿Qué me recomiendas?']],
+        routes: [
+          { match: /recommend|suggest|popular|best|good here/, stay: true,
+            reply: "Our oat milk latte is super popular, and the cold brew is amazing today. What sounds good?",
+            replyEs: 'Nuestro latte con leche de avena es muy popular, y el cold brew está buenísimo hoy. ¿Qué se te antoja?' },
+          { match: DRINK_RE, act: (s, t) => { s.drink = pickDrink(t); s.size = pickSize(t); },
+            to: (s) => (s.size ? 'extras' : 'size') }
+        ],
+        retry: "Sorry, I didn't catch that. We've got lattes, cappuccinos, americanos, and cold brew. What would you like?"
+      },
+      size: {
+        say: (s) => `Great choice! What size would you like for your ${s.drink}? Small, medium, or large?`,
+        es: (s) => `¡Buena elección! ¿De qué tamaño quieres tu ${s.drink}? ¿Pequeño, mediano o grande?`,
+        hints: [['A medium, please.', 'Mediano, por favor.'], ["I'll have a large.", 'Lo quiero grande.'], ['What sizes do you have?', '¿Qué tamaños tienen?']],
+        routes: [
+          { match: /what sizes|which sizes|sizes do you|how big/, stay: true,
+            reply: 'We have small, twelve ounces, medium, sixteen, and large, twenty ounces.',
+            replyEs: 'Tenemos pequeño (12 oz), mediano (16 oz) y grande (20 oz).' },
+          { match: SIZE_RE, act: (s, t) => { s.size = pickSize(t); }, to: 'extras' }
+        ],
+        retry: 'Sorry, was that small, medium, or large?'
+      },
+      extras: {
+        say: () => 'Any milk, sugar, or an extra shot with that?',
+        es: () => '¿Quieres leche, azúcar o un shot extra de café?',
+        hints: [['Oat milk, please.', 'Con leche de avena, por favor.'], ["No, thanks. That's all.", 'No, gracias. Eso es todo.'], ['Could I get an extra shot?', '¿Me pones un shot extra?']],
+        routes: [
+          { match: /oat|almond|soy|whole|skim|milk|sugar|shot|syrup|vanilla|caramel|honey|cream|sweetener/,
+            act: (s, t) => { s.extra = true; }, to: 'name' },
+          { match: NO_RE, to: 'name' },
+          { match: YES_RE, stay: true, reply: 'Sure! What would you like? Milk, sugar, or an extra shot?',
+            replyEs: '¡Claro! ¿Qué te gustaría? ¿Leche, azúcar o un shot extra?' }
+        ],
+        retry: 'Sorry? Would you like any milk, sugar, or an extra shot?'
+      },
+      name: {
+        say: () => 'Perfect. Can I get a name for the order?',
+        es: () => 'Perfecto. ¿Me das un nombre para el pedido?',
+        hints: [["It's Carlos.", 'Es Carlos.'], ['My name is Ana.', 'Me llamo Ana.'], ["Sure, it's Laura.", 'Claro, es Laura.']],
+        routes: [{ any: true, act: (s, t) => { s.name = pickName(t); }, to: 'pay' }]
+      },
+      pay: {
+        say: (s) => `Thanks, ${s.name}! That'll be ${money(coffeePrice(s))}. Will that be cash or card?`,
+        es: (s) => `¡Gracias, ${s.name}! Son ${money(coffeePrice(s))}. ¿Efectivo o tarjeta?`,
+        hints: [['Card, please.', 'Con tarjeta, por favor.'], ['Can I pay with Apple Pay?', '¿Puedo pagar con Apple Pay?'], ['Cash. Here you go.', 'En efectivo. Aquí tienes.']],
+        routes: [{ match: /card|credit|debit|apple|google|phone|tap|cash|here you go|here you are|here it is/,
+                   act: (s, t) => { s.pay = /cash/.test(t) ? 'cash' : 'card'; }, to: 'done' }],
+        retry: 'Sorry, will that be cash or card?'
+      },
+      done: {
+        end: true,
+        say: (s) => `${s.pay === 'cash' ? "Here's your change." : 'All set, the payment went through.'} Your ${s.size || 'medium'} ${s.drink} will be ready at the end of the counter. Have a great day, ${s.name}!`,
+        es: (s) => `${s.pay === 'cash' ? 'Aquí tienes tu cambio.' : 'Listo, el pago se realizó.'} Tu ${s.drink} estará listo al final del mostrador. ¡Que tengas un gran día, ${s.name}!`
+      }
+    }
+  },
+
+  /* ✈️ ------------------------------------------------------------ */
+  airport: {
+    emoji: '✈️', title: 'Airport Immigration',
+    intro: 'Acabas de aterrizar en JFK. El oficial de inmigración te hará algunas preguntas. ¡Responde con calma!',
+    character: { name: 'Officer Johnson', role: 'U.S. Customs & Border Protection', emoji: '👮🏾‍♂️', pitch: 0.92 },
+    start: 'passport',
+    order: ['passport', 'purpose', 'length', 'stay', 'job', 'declare', 'done'],
+    nodes: {
+      passport: {
+        say: () => 'Good afternoon. Next, please. Can I see your passport and your customs form?',
+        es: () => 'Buenas tardes. Siguiente, por favor. ¿Puedo ver su pasaporte y su formulario de aduana?',
+        hints: [['Here you go.', 'Aquí tiene.'], ['Sure, here it is.', 'Claro, aquí está.'], ["Good afternoon. Here's my passport.", 'Buenas tardes. Aquí está mi pasaporte.']],
+        routes: [{ any: true, to: 'purpose' }]
+      },
+      purpose: {
+        say: () => "Thank you. What's the purpose of your visit?",
+        es: () => 'Gracias. ¿Cuál es el propósito de su visita?',
+        hints: [["I'm here on vacation.", 'Estoy aquí de vacaciones.'], ["I'm here for a business meeting.", 'Estoy aquí por una reunión de negocios.'], ["I'm visiting my family.", 'Estoy visitando a mi familia.']],
+        routes: [{ match: /vacation|holiday|tourism|tourist|sightseeing|visit|business|work|meeting|conference|family|friend|study|school|course|wedding|pleasure|travel|trip/,
+                   act: (s, t) => { s.purpose = /business|work|meeting|conference/.test(t) ? 'business' : 'pleasure'; }, to: 'length' }],
+        retry: "I'm sorry. Are you here for business or pleasure?"
+      },
+      length: {
+        say: () => 'How long are you planning to stay?',
+        es: () => '¿Cuánto tiempo planea quedarse?',
+        hints: [['For two weeks.', 'Por dos semanas.'], ['About ten days.', 'Unos diez días.'], ["Just five days. I fly back on Sunday.", 'Solo cinco días. Regreso el domingo.']],
+        routes: [{ match: /\d|one|two|three|four|five|six|seven|eight|nine|ten|couple|few|week|day|month|weekend|night/, to: 'stay' }],
+        retry: 'How many days or weeks will you be in the country?'
+      },
+      stay: {
+        say: () => 'And where will you be staying?',
+        es: () => '¿Y dónde se va a hospedar?',
+        hints: [['At a hotel in Manhattan.', 'En un hotel en Manhattan.'], ["I'm staying with a friend in Brooklyn.", 'Me quedo con un amigo en Brooklyn.'], ['At an Airbnb in Queens.', 'En un Airbnb en Queens.']],
+        routes: [{ any: true, to: 'job' }]
+      },
+      job: {
+        say: () => 'What do you do for a living?',
+        es: () => '¿A qué se dedica?',
+        hints: [["I'm a software engineer.", 'Soy ingeniero de software.'], ["I'm a student.", 'Soy estudiante.'], ['I work as a nurse.', 'Trabajo como enfermera.']],
+        routes: [{ any: true, to: 'declare' }]
+      },
+      declare: {
+        say: () => 'Do you have anything to declare? Any food, plants, or more than ten thousand dollars in cash?',
+        es: () => '¿Tiene algo que declarar? ¿Comida, plantas o más de diez mil dólares en efectivo?',
+        hints: [['No, nothing to declare.', 'No, nada que declarar.'], ['Just some chocolates for my family.', 'Solo unos chocolates para mi familia.'], ["No, I don't.", 'No, no tengo.']],
+        routes: [
+          { match: /food|chocolate|candy|candies|snack|fruit|cheese|plant|seed|cash|money|medicine|gift|coffee|meat/,
+            act: (s) => { s.declared = true; }, to: 'done' },
+          { match: NO_RE, to: 'done' },
+          { match: /\byes\b/, act: (s) => { s.declared = true; }, to: 'done' }
+        ],
+        retry: 'Sorry, do you have anything to declare? Yes or no?'
+      },
+      done: {
+        end: true,
+        say: (s) => `${s.declared ? "Alright, just mention that at customs on your way out." : 'Everything looks good.'} Welcome to the United States. Enjoy your ${s.purpose === 'business' ? 'trip' : 'vacation'}!`,
+        es: (s) => `${s.declared ? 'Bien, solo menciónelo en la aduana a la salida.' : 'Todo está en orden.'} Bienvenido a los Estados Unidos. ¡Disfrute su ${s.purpose === 'business' ? 'viaje' : 'estancia'}!`
+      }
+    }
+  },
+
+  /* 🏨 ------------------------------------------------------------ */
+  hotel: {
+    emoji: '🏨', title: 'Hotel Check-in',
+    intro: 'Llegas a un hotel en Nueva York por la noche. Haz el check-in con la recepcionista.',
+    character: { name: 'Olivia', role: 'Front Desk · The Grand Hudson', emoji: '👩🏼‍💼', pitch: 1.05 },
+    start: 'greet',
+    order: ['greet', 'name', 'nights', 'id', 'breakfast', 'done'],
+    nodes: {
+      greet: {
+        say: () => 'Good evening, and welcome to The Grand Hudson. Do you have a reservation with us?',
+        es: () => 'Buenas noches y bienvenido a The Grand Hudson. ¿Tiene una reservación con nosotros?',
+        hints: [['Yes, I have a reservation.', 'Sí, tengo una reservación.'], ["Yes, it's under the name García.", 'Sí, está a nombre de García.'], ["No, I don't. Do you have any rooms available?", 'No. ¿Tienen habitaciones disponibles?']],
+        routes: [
+          { match: /under (?:the name )?(?:of )?[a-z]+/, act: (s, t) => { s.last = pickName(t); }, to: 'nights' },
+          { match: /\b(no|don't|do not|available|any rooms)\b/, act: (s) => { s.walkin = true; }, to: 'name' },
+          { match: YES_RE, to: 'name' }
+        ],
+        retry: "I'm sorry, do you have a reservation? Yes or no?"
+      },
+      name: {
+        say: (s) => s.walkin ? "No problem, we still have a few rooms tonight. May I have your name, please?" : 'Wonderful. May I have your last name, please?',
+        es: (s) => s.walkin ? 'No hay problema, aún tenemos algunas habitaciones esta noche. ¿Me da su nombre, por favor?' : 'Perfecto. ¿Me da su apellido, por favor?',
+        hints: [["It's Rodríguez.", 'Es Rodríguez.'], ['My last name is López.', 'Mi apellido es López.'], ["Sure, it's Martínez.", 'Claro, es Martínez.']],
+        routes: [{ any: true, act: (s, t) => { s.last = pickName(t); }, to: 'nights' }]
+      },
+      nights: {
+        say: (s) => s.walkin ? `Thank you, ${s.last}. How many nights would you like to stay?` : `Thank you. I found your booking, ${s.last}. How many nights are you staying with us?`,
+        es: (s) => s.walkin ? `Gracias, ${s.last}. ¿Cuántas noches le gustaría quedarse?` : `Gracias. Encontré su reservación, ${s.last}. ¿Cuántas noches se quedará con nosotros?`,
+        hints: [['Three nights, please.', 'Tres noches, por favor.'], ["I'm staying for a week.", 'Me quedo una semana.'], ['Just one night.', 'Solo una noche.']],
+        routes: [{ match: /\d|one|two|three|four|five|six|seven|eight|nine|ten|couple|few|week|night|tonight|weekend/,
+                   act: (s, t) => { s.nights = /week/.test(t) ? 7 * (parseNumber(t) || 1) : /weekend/.test(t) ? 2 : (parseNumber(t) || 1); }, to: 'id' }],
+        retry: 'Sorry, how many nights will you be staying?'
+      },
+      id: {
+        say: () => 'Great. Could I see a photo ID and a credit card for incidentals, please?',
+        es: () => 'Muy bien. ¿Podría mostrarme una identificación con foto y una tarjeta de crédito para gastos adicionales?',
+        hints: [['Sure, here you go.', 'Claro, aquí tiene.'], ["Here's my passport and my card.", 'Aquí está mi pasaporte y mi tarjeta.'], ['Sorry, what are incidentals?', 'Perdón, ¿qué son los "incidentals"?']],
+        routes: [
+          { match: /what (?:are|is|does) incidental|incidentals mean|what's incidental/, stay: true,
+            reply: "Incidentals are extra charges, like the minibar or room service. We just place a small hold on your card. Could I see your ID and card?",
+            replyEs: 'Son cargos extra, como el minibar o el servicio a la habitación. Solo hacemos una retención pequeña en su tarjeta. ¿Me muestra su identificación y tarjeta?' },
+          { any: true, to: 'breakfast' }
+        ]
+      },
+      breakfast: {
+        say: () => 'Thank you. Would you like to add breakfast for fifteen dollars per night?',
+        es: () => 'Gracias. ¿Le gustaría agregar el desayuno por quince dólares por noche?',
+        hints: [['Yes, please. That sounds great.', 'Sí, por favor. Suena genial.'], ["No, thank you. I'm fine.", 'No, gracias. Así estoy bien.'], ['What time is breakfast served?', '¿A qué hora sirven el desayuno?']],
+        routes: [
+          { match: /what time|when|where is|where's/, stay: true,
+            reply: "Breakfast is served from six thirty to ten thirty on the second floor. Would you like to add it?",
+            replyEs: 'El desayuno se sirve de 6:30 a 10:30 en el segundo piso. ¿Le gustaría agregarlo?' },
+          { match: NO_RE, act: (s) => { s.bf = false; }, to: 'done' },
+          { match: YES_RE, act: (s) => { s.bf = true; }, to: 'done' }
+        ],
+        retry: 'Sorry, would you like breakfast included? Yes or no?'
+      },
+      done: {
+        end: true,
+        say: (s) => `You're all set! You're in room twelve oh four for ${s.nights} night${s.nights === 1 ? '' : 's'}${s.bf ? ', with breakfast included' : ''}. The Wi-Fi password is on your key card. Enjoy your stay!`,
+        es: (s) => `¡Todo listo! Está en la habitación 1204 por ${s.nights} noche${s.nights === 1 ? '' : 's'}${s.bf ? ', con desayuno incluido' : ''}. La contraseña del Wi-Fi está en su tarjeta llave. ¡Disfrute su estancia!`
+      }
+    }
+  },
+
+  /* 👋 ------------------------------------------------------------ */
+  friends: {
+    emoji: '👋', title: 'Making Friends',
+    intro: 'Estás en Central Park y alguien empieza a conversar contigo. Preséntate y haz small talk.',
+    character: { name: 'Jake', role: 'Nuevo amigo · Central Park', emoji: '🧑🏻‍🦱', pitch: 1.0 },
+    start: 'hi',
+    order: ['hi', 'from', 'age', 'job', 'fun', 'done'],
+    nodes: {
+      hi: {
+        say: () => "Hey! I'm Jake. I don't think we've met before. What's your name?",
+        es: () => '¡Hola! Soy Jake. Creo que no nos conocíamos. ¿Cómo te llamas?',
+        hints: [["Hi Jake! I'm Sofía. Nice to meet you.", '¡Hola Jake! Soy Sofía. Mucho gusto.'], ["My name is Diego. How's it going?", 'Me llamo Diego. ¿Qué tal?'], ["I'm Andrea. Nice to meet you too.", 'Soy Andrea. Igualmente.']],
+        routes: [{ any: true, act: (s, t) => { s.name = pickName(t.replace(/\bjake\b/g, '')); }, to: 'from' }]
+      },
+      from: {
+        say: (s) => `Nice to meet you, ${s.name}! So, where are you from?`,
+        es: (s) => `¡Mucho gusto, ${s.name}! Y, ¿de dónde eres?`,
+        hints: [["I'm from Mexico.", 'Soy de México.'], ["I'm from Bogotá, Colombia.", 'Soy de Bogotá, Colombia.'], ['I come from Spain. And you?', 'Vengo de España. ¿Y tú?']],
+        routes: [{ any: true, to: 'age' }]
+      },
+      age: {
+        say: () => "Oh, cool! I've always wanted to go there. How old are you, if you don't mind me asking?",
+        es: () => '¡Qué genial! Siempre he querido ir. ¿Cuántos años tienes, si no te molesta la pregunta?',
+        hints: [["I'm twenty-five.", 'Tengo veinticinco.'], ["I'm 30 years old.", 'Tengo 30 años.'], ["I'm in my twenties.", 'Tengo veintitantos.']],
+        routes: [{ match: /\d|twent|thirt|fort|fift|sixt|sevent|eight|nine|teen|old|young|years|mind/, to: 'job' }],
+        retry: 'Haha, no worries. So, how old are you?'
+      },
+      job: {
+        say: () => 'Nice! And what do you do?',
+        es: () => '¡Genial! ¿Y a qué te dedicas?',
+        hints: [["I'm a graphic designer.", 'Soy diseñador gráfico.'], ["I'm a student at university.", 'Soy estudiante universitario.'], ['I work as a teacher.', 'Trabajo como profesor.']],
+        routes: [{ any: true, to: 'fun' }]
+      },
+      fun: {
+        say: () => 'That sounds interesting! What do you like to do in your free time?',
+        es: () => '¡Suena interesante! ¿Qué te gusta hacer en tu tiempo libre?',
+        hints: [['I love playing soccer.', 'Me encanta jugar fútbol.'], ['I like watching movies and reading.', 'Me gusta ver películas y leer.'], ['I enjoy cooking and traveling.', 'Disfruto cocinar y viajar.']],
+        routes: [{ any: true, to: 'done' }]
+      },
+      done: {
+        end: true,
+        say: (s) => `Awesome, we should hang out sometime! It was really nice talking to you, ${s.name}. See you around!`,
+        es: (s) => `¡Genial, deberíamos salir algún día! Fue un gusto hablar contigo, ${s.name}. ¡Nos vemos!`
+      }
+    }
+  }
+};
+
+/* ---------------------------------------------------------------
+   3. DETECTOR DE ERRORES COMUNES (hispanohablantes)
+   kind: 'grammar' (error) | 'style' (correcto pero poco natural)
+   --------------------------------------------------------------- */
+const COMPARATIVES = { big: 'bigger', small: 'smaller', cheap: 'cheaper', good: 'better', bad: 'worse', hot: 'hotter', cold: 'colder', large: 'larger', fast: 'faster' };
+const PAST_TO_BASE = { went: 'go', had: 'have', saw: 'see', made: 'make', took: 'take', came: 'come', gave: 'give', bought: 'buy', paid: 'pay', did: 'do' };
+const JOBS = 'engineer|doctor|teacher|student|nurse|lawyer|developer|designer|programmer|architect|accountant|manager|chef|waiter|waitress|writer|artist|dentist|journalist|photographer|consultant|entrepreneur';
+
+const GRAMMAR_RULES = [
+  { kind: 'grammar', re: /\bi (?:have|has) (\w+) years(?: old)?\b/,
+    right: (m) => `I'm ${m[1]} years old`, tip: "Para la edad se usa el verbo <b>to be</b>, no <i>have</i>: “I'm 20” o “I'm 20 years old”." },
+  { kind: 'grammar', re: /\b(coffee|tea|latte|chocolate|cappuccino|americano) (black|white|hot|cold|iced|big|small|large|medium|sweet|strong|decaf)\b/,
+    right: (m) => `a ${m[2]} ${m[1]}`, tip: 'En inglés el adjetivo va <b>antes</b> del sustantivo: “a black coffee”, no “a coffee black”.' },
+  { kind: 'grammar', re: /\bmilk of (oat|almond|soy|coconut|rice)\b/,
+    right: (m) => `${m[1]} milk`, tip: 'El tipo de leche va antes: “oat milk”, “almond milk”.' },
+  { kind: 'grammar', re: /\b(?:i'm|i am) agree\b/,
+    right: () => 'I agree', tip: '“Agree” ya es un verbo: se dice “I agree”, sin <i>am</i>.' },
+  { kind: 'grammar', re: /\bin vacations?\b/,
+    right: () => 'on vacation', tip: 'Se dice “<b>on</b> vacation” (o “on holiday”), no “in vacation”.' },
+  { kind: 'grammar', re: /\bto do tourism\b/,
+    right: () => "I'm here for sightseeing / on vacation", tip: '“Hacer turismo” no se traduce literal. Di “for sightseeing” o “on vacation”.' },
+  { kind: 'grammar', re: new RegExp(`\\b(?:i'm|i am) (${JOBS})\\b`),
+    right: (m) => `I'm ${article(m[1])} ${m[1]}`, tip: 'Con profesiones se usa el artículo <b>a / an</b>: “I\'m an engineer”, “I\'m a student”.' },
+  { kind: 'grammar', re: /\bi work (?:of|like|in) (?:a |an )?(engineer|doctor|teacher|nurse|lawyer|developer|designer|programmer|architect|accountant|manager|chef|waiter|writer)\b/,
+    right: (m) => `I work as ${article(m[1])} ${m[1]}`, tip: '“Trabajo de/como...” se dice “I work <b>as</b> a...”.' },
+  { kind: 'grammar', re: /\b(he|she|it) have\b/,
+    right: (m) => `${m[1]} has`, tip: 'Con he / she / it, “have” cambia a <b>has</b>.' },
+  { kind: 'grammar', re: /\bmore (big|small|cheap|good|bad|hot|cold|large|fast)\b/,
+    right: (m) => COMPARATIVES[m[1]], tip: 'Los adjetivos cortos forman el comparativo con <b>-er</b>: bigger, cheaper, better.' },
+  { kind: 'grammar', re: /\bdepends? of\b/,
+    right: () => 'it depends on', tip: 'Se dice “depends <b>on</b>”, no “depends of”.' },
+  { kind: 'grammar', re: /\bexplain me\b/,
+    right: () => 'explain to me / can you explain…?', tip: '“Explain” necesita <b>to</b>: “Can you explain it to me?”.' },
+  { kind: 'grammar', re: /\bhow much (?:it )?costs?\b(?! does)/,
+    right: () => 'How much does it cost? / How much is it?', tip: 'En preguntas con “how much” necesitas <b>does</b>: “How much does it cost?”, o más simple: “How much is it?”.' },
+  { kind: 'grammar', re: /\b(?:didn't|did not|did) (went|had|saw|made|took|came|gave|bought|paid)\b/,
+    right: (m) => m[0].replace(m[1], PAST_TO_BASE[m[1]]), tip: 'Después de <b>did / didn\'t</b> el verbo va en forma base: “I didn\'t go”, no “didn\'t went”.' },
+  { kind: 'grammar', re: /\bpeoples\b/,
+    right: () => 'people', tip: '“People” ya es plural; no lleva -s.' },
+  { kind: 'grammar', re: /\bdeclarate\b/,
+    right: () => 'declare', tip: 'El verbo es “<b>declare</b>”: “Nothing to declare”.' },
+  { kind: 'grammar', re: /\b(?:in|to|on|at) the name of\b/,
+    right: () => 'under the name…', tip: 'Las reservas van “<b>under</b> the name García”.' },
+  { kind: 'grammar', re: /\bi have (hunger|thirst|hungry|thirsty)\b/,
+    right: (m) => `I'm ${m[1].startsWith('hung') ? 'hungry' : 'thirsty'}`, tip: '“Tengo hambre/sed” se dice con <b>to be</b>: “I\'m hungry”, “I\'m thirsty”.' },
+  // --- Estilo: correcto, pero suena brusco ---
+  { kind: 'style', re: /\bi want\b/,
+    right: () => "I'd like… / Can I get…?", tip: '“I want” es correcto pero suena algo brusco. “I\'d like” o “Can I get…?” suena más amable y natural.' },
+  { kind: 'style', re: /\bgive me\b/,
+    right: () => 'Can I have…? / Could I get…?', tip: '“Give me” suena a orden. Prueba “Can I have…?” para sonar más natural.' }
+];
+
+/* Frases que merecen un elogio (refuerzo positivo) */
+const PRAISE_RE = /\b(could i|can i get|can i have|i'd like|i would like|please|thank you|thanks|here you go|here it is|sounds great|i'm here on|i'm staying)\b/;
+const PRAISES = ['¡Suena muy natural! 🙌', '¡Así hablan los nativos! ✨', '¡Excelente pronunciación de frase! 💜', '¡Muy educado y fluido! 👏'];
+
+function findIssues(t) {
+  const out = [];
+  for (const r of GRAMMAR_RULES) {
+    const m = t.match(r.re);
+    if (m) out.push({ kind: r.kind, wrong: m[0], right: r.right(m), tip: r.tip });
+  }
+  // Prioriza errores gramaticales sobre sugerencias de estilo
+  return out.sort((a, b) => (a.kind === 'grammar' ? -1 : 1) - (b.kind === 'grammar' ? -1 : 1));
+}
+
+/* ---------------------------------------------------------------
+   4. ESTADO GLOBAL
+   --------------------------------------------------------------- */
+const state = {
+  scenarioId: 'coffee',
+  nodeId: null,
+  vars: {},
+  started: false,
+  ended: false,
+  busy: false,          // el personaje está "escribiendo"
+  mic: 'idle',          // idle | listening | speaking
+  retries: 0,
+  stats: { turns: 0, tips: 0, praises: 0, retries: 0 },
+  slow: false,
+  lastBot: { en: '', es: '' }
+};
+const scenario = () => SCENARIOS[state.scenarioId];
+const node = () => scenario().nodes[state.nodeId];
+
+/* ---------------------------------------------------------------
+   5. SÍNTESIS DE VOZ (window.speechSynthesis)
+   --------------------------------------------------------------- */
+const synth = window.speechSynthesis;
+let voices = [];
+function loadVoices() { voices = synth ? synth.getVoices() : []; }
+if (synth) { loadVoices(); synth.onvoiceschanged = loadVoices; }
+
+/** Elige la voz en-US más natural disponible en el sistema. */
+function pickVoice() {
+  const en = voices.filter((v) => /^en[-_]US/i.test(v.lang));
+  const preferred = ['Google US English', 'Microsoft Aria', 'Microsoft Jenny', 'Microsoft Guy', 'Samantha', 'Ava', 'Allison', 'Alex', 'Microsoft Zira'];
+  for (const p of preferred) { const v = en.find((x) => x.name.includes(p)); if (v) return v; }
+  return en[0] || voices.find((v) => /^en/i.test(v.lang)) || null;
+}
+
+/** Habla un texto en inglés. Devuelve una promesa que se resuelve al terminar. */
+function speak(text, { rate } = {}) {
+  return new Promise((resolve) => {
+    if (!synth) return resolve();
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US';
+    const v = pickVoice(); if (v) u.voice = v;
+    u.rate = rate || (state.slow ? 0.72 : 0.95);
+    u.pitch = scenario().character.pitch || 1;
+    let done = false;
+    const finish = () => { if (done) return; done = true; clearTimeout(safety); setMic(state.mic === 'speaking' ? 'idle' : state.mic); resolve(); };
+    // Red de seguridad: algunos navegadores no disparan onend
+    const safety = setTimeout(finish, text.length * 110 + 4000);
+    u.onstart = () => { if (state.mic !== 'listening') setMic('speaking'); };
+    u.onend = finish; u.onerror = finish;
+    setTimeout(() => synth.speak(u), 60); // pequeño retardo: evita un bug de Chrome tras cancel()
+  });
+}
+
+/* ---------------------------------------------------------------
+   6. RECONOCIMIENTO DE VOZ (Web Speech API)
+   --------------------------------------------------------------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+
+function startListening() {
+  if (!SR) { showUnsupported(); return; }
+  if (synth) synth.cancel();
+  let finalText = '', interim = '';
+  rec = new SR();             // instancia nueva en cada turno (más estable en Safari)
+  rec.lang = 'en-US';
+  rec.interimResults = true;
+  rec.continuous = false;
+  rec.maxAlternatives = 1;
+
+  rec.onstart = () => { setMic('listening'); setLive('🎙️ Te escucho… habla en inglés', true); };
+  rec.onresult = (e) => {
+    interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
+    }
+    setLive(`“${(finalText + interim).trim()}”`, true);
+  };
+  rec.onerror = (e) => handleMicError(e.error);
+  rec.onend = () => {
+    rec = null;
+    setMic('idle');
+    const said = (finalText || interim).trim();
+    if (said) handleUserInput(said);
+    else if (state.started && !state.ended) setLive('Pulsa el micrófono para responder');
+  };
+  try { rec.start(); } catch (err) { handleMicError('start-failed'); }
+}
+
+function stopListening() { if (rec) rec.stop(); }
+
+/** Mensajes de error amables para cada fallo del micrófono. */
+function handleMicError(code) {
+  setMic('idle');
+  switch (code) {
+    case 'not-allowed':
+    case 'service-not-allowed':
+      showBanner('🎙️ <b>Micrófono bloqueado.</b> Haz clic en el icono 🔒 / 🎤 de la barra de direcciones → <b>Permitir micrófono</b> y recarga la página. Mientras tanto, puedes escribir tus respuestas ⌨️.');
+      toggleKeyboard(true);
+      break;
+    case 'no-speech': toast('No te escuché 🤔 Acércate al micrófono e inténtalo otra vez.'); break;
+    case 'audio-capture': showBanner('No se detectó ningún micrófono. Conecta uno o usa el teclado ⌨️.'); toggleKeyboard(true); break;
+    case 'network': toast('El reconocimiento de voz necesita conexión a internet 🌐'); break;
+    case 'aborted': break;
+    default: toast('No pude usar el micrófono. Inténtalo de nuevo o escribe tu respuesta.');
+  }
+}
+
+function showUnsupported() {
+  showBanner('Tu navegador no soporta reconocimiento de voz. Usa <b>Chrome</b>, <b>Edge</b> o <b>Safari</b> para hablar — o escribe tus respuestas con el teclado ⌨️.');
+  toggleKeyboard(true);
+}
+
+/* ---------------------------------------------------------------
+   7. MOTOR DE CONVERSACIÓN
+   --------------------------------------------------------------- */
+function startConversation() {
+  hideFeedback();
+  if (synth) synth.cancel();
+  stopListening();
+  Object.assign(state, {
+    nodeId: scenario().start, vars: {}, started: true, ended: false, busy: false, retries: 0,
+    stats: { turns: 0, tips: 0, praises: 0, retries: 0 }
+  });
+  $('chat').innerHTML = '';
+  updateProgress();
+  botTurn(node().say(state.vars), node().es(state.vars));
+}
+
+/** Procesa lo que dijo (o escribió) el usuario. */
+function handleUserInput(raw) {
+  if (!state.started) { startConversation(); return; }
+  if (state.ended) return;
+  if (state.busy) { setTimeout(() => handleUserInput(raw), 400); return; } // espera a que el personaje termine de "escribir"
+  const t = norm(raw);
+  if (!t) return;
+
+  state.stats.turns++;
+  const issues = findIssues(t);
+  addUserBubble(raw, issues.length > 0 && issues[0].kind === 'grammar');
+  setLive('');
+
+  // 1) Feedback: corrección o elogio
+  if (issues.length) {
+    state.stats.tips++;
+    showCorrection(raw, issues);
+  } else if (PRAISE_RE.test(t) && Math.random() < 0.7) {
+    state.stats.praises++;
+    showPraise();
+  }
+
+  // 2) Petición de repetir → el personaje repite más despacio
+  if (REPEAT_RE.test(t)) {
+    botTurn(`Sure. ${state.lastBot.en}`, state.lastBot.es, { rate: 0.7, repeat: true });
+    return;
+  }
+
+  // 3) Buscar la ruta que coincide en el árbol
+  const n = node();
+  for (const r of n.routes || []) {
+    if (r.any || r.match.test(t)) {
+      if (r.act) r.act(state.vars, t);
+      if (r.stay) { botTurn(r.reply, r.replyEs); return; }
+      state.nodeId = typeof r.to === 'function' ? r.to(state.vars) : r.to;
+      state.retries = 0;
+      updateProgress();
+      const next = node();
+      botTurn(next.say(state.vars), next.es(state.vars));
+      return;
+    }
+  }
+
+  // 4) Nada coincidió → el personaje pide aclaración; al 2º intento abre las pistas
+  state.retries++; state.stats.retries++;
+  botTurn(n.retry || "Sorry, could you say that again?", 'Perdona, no te entendí bien. Puedes pedir una pista 💡', { noTrack: true });
+  if (state.retries >= 2) setTimeout(openHints, 2200);
+}
+
+/** El personaje "escribe", aparece la burbuja y la lee en voz alta. */
+function botTurn(en, es, opts = {}) {
+  state.busy = true;
+  document.body.classList.remove('your-turn');
+  const typing = addTyping();
+  setTimeout(async () => {
+    typing.remove();
+    addBotBubble(en, es);
+    if (!opts.noTrack && !opts.repeat) state.lastBot = { en, es };
+    else if (opts.noTrack) state.lastBot = { en: state.lastBot.en || en, es: state.lastBot.es || es };
+    state.busy = false;
+
+    const isEnd = !!node().end && !opts.repeat;
+    if (isEnd) { state.ended = true; updateProgress(); }
+    setLive(isEnd ? '' : 'Escuchando al personaje… 🔊');
+    await speak(en, { rate: opts.rate });
+    if (isEnd) { addSummary(); setLive('🎉 ¡Conversación completada!'); }
+    else if (state.mic !== 'listening') { setLive('Tu turno · pulsa el micrófono 🎙️'); document.body.classList.add('your-turn'); }
+  }, 550 + Math.min(en.length * 8, 700));
+}
+
+/* ---------------------------------------------------------------
+   8. RENDER DEL CHAT
+   --------------------------------------------------------------- */
+const chat = $('chat');
+const scrollDown = () => requestAnimationFrame(() => chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' }));
+
+function addTyping() {
+  const el = document.createElement('div');
+  el.className = 'flex items-end gap-2 bubble-in';
+  el.innerHTML = `<div class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-zinc-800 text-base">${scenario().character.emoji}</div>
+    <div class="flex gap-1 rounded-2xl rounded-bl-md bg-zinc-800/80 px-4 py-3"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>`;
+  chat.appendChild(el); scrollDown();
+  return el;
+}
+
+function addBotBubble(en, es) {
+  const el = document.createElement('div');
+  el.className = 'flex items-end gap-2 bubble-in';
+  el.innerHTML = `
+    <div class="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-zinc-800 text-base">${scenario().character.emoji}</div>
+    <div class="max-w-[82%]">
+      <div class="rounded-2xl rounded-bl-md border border-white/5 bg-zinc-800/80 px-4 py-2.5 text-[15px] leading-relaxed shadow-sm">
+        <p data-en></p>
+        <p data-es class="mt-1.5 hidden border-t border-white/5 pt-1.5 text-sm italic text-zinc-400"></p>
+      </div>
+      <div class="ml-1 mt-1 flex gap-3 text-xs text-zinc-500">
+        <button type="button" data-replay class="transition hover:text-emerald-400">🔊 Repetir</button>
+        <button type="button" data-tr class="transition hover:text-violet-300">🇪🇸 Traducir</button>
+      </div>
+    </div>`;
+  el.querySelector('[data-en]').textContent = en;
+  el.querySelector('[data-es]').textContent = es || '';
+  el.querySelector('[data-replay]').onclick = () => speak(en);
+  el.querySelector('[data-tr]').onclick = (e) => {
+    const p = el.querySelector('[data-es]');
+    p.classList.toggle('hidden');
+    e.currentTarget.textContent = p.classList.contains('hidden') ? '🇪🇸 Traducir' : '🙈 Ocultar';
+    scrollDown();
+  };
+  chat.appendChild(el); scrollDown();
+}
+
+function addUserBubble(text, hasError) {
+  const el = document.createElement('div');
+  el.className = 'flex justify-end bubble-in';
+  el.innerHTML = `<div class="relative max-w-[82%] rounded-2xl rounded-br-md bg-gradient-to-br from-violet-600 to-violet-700 px-4 py-2.5 text-[15px] leading-relaxed text-white shadow-lg shadow-violet-900/30"><p></p></div>`;
+  el.querySelector('p').textContent = text;
+  if (hasError) {
+    const dot = document.createElement('span');
+    dot.className = 'absolute -left-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-amber-400 text-[10px] shadow';
+    dot.textContent = '💡'; dot.title = 'Hay una sugerencia para esta frase';
+    el.firstElementChild.appendChild(dot);
+  }
+  chat.appendChild(el); scrollDown();
+}
+
+/** Pantalla inicial de cada escenario. */
+function renderIntro() {
+  const sc = scenario();
+  chat.innerHTML = `
+    <div class="bubble-in mx-auto mt-4 max-w-sm text-center">
+      <div class="mx-auto grid h-24 w-24 place-items-center rounded-full bg-gradient-to-br from-violet-500/20 to-emerald-500/20 text-5xl ring-1 ring-white/10">${sc.character.emoji}</div>
+      <h2 class="mt-4 text-xl font-bold">${sc.emoji} ${sc.title}</h2>
+      <p class="mt-2 text-sm leading-relaxed text-zinc-400">${sc.intro}</p>
+      <ul class="mt-5 space-y-2 text-left text-sm text-zinc-300">
+        <li class="flex gap-2 rounded-xl bg-white/5 px-3 py-2">🎙️ <span>Pulsa el micrófono y responde <b>en inglés</b>.</span></li>
+        <li class="flex gap-2 rounded-xl bg-white/5 px-3 py-2">💡 <span>¿Te bloqueas? Usa <b>“¿Qué digo?”</b> para ver ideas.</span></li>
+        <li class="flex gap-2 rounded-xl bg-white/5 px-3 py-2">🐢 <span>Di <i>“Could you repeat that?”</i> y te hablarán más despacio.</span></li>
+      </ul>
+      <button id="startBtn" type="button" class="mt-6 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-violet-500 px-5 py-3.5 font-semibold text-white shadow-lg shadow-violet-600/30 transition hover:brightness-110 active:scale-[.98]">
+        ▶ Empezar conversación
+      </button>
+      <p class="mt-3 text-xs text-zinc-500">Aquí nadie te juzga. Equivocarse es parte del loop 💜</p>
+    </div>`;
+  $('startBtn').onclick = startConversation;
+}
+
+/** Resumen final con estadísticas. */
+function addSummary() {
+  const s = state.stats;
+  const score = Math.max(40, 100 - s.tips * 8 - s.retries * 6);
+  const msg = score >= 90 ? '¡Impresionante! Sonaste como un nativo 🏆' : score >= 70 ? '¡Muy bien! Cada conversación te hace más fluido 🚀' : '¡Lo lograste! La práctica hace al maestro 💪';
+  const keys = Object.keys(SCENARIOS);
+  const nextId = keys[(keys.indexOf(state.scenarioId) + 1) % keys.length];
+  const el = document.createElement('div');
+  el.className = 'bubble-in mx-auto mt-2 max-w-sm rounded-3xl border border-emerald-500/25 bg-gradient-to-b from-emerald-500/10 to-transparent p-5 text-center';
+  el.innerHTML = `
+    <p class="text-3xl">🎉</p>
+    <h3 class="mt-1 text-lg font-bold">¡Conversación completada!</h3>
+    <p class="mt-1 text-sm text-zinc-400">${msg}</p>
+    <div class="mt-4 grid grid-cols-3 gap-2 text-center">
+      <div class="rounded-xl bg-white/5 py-2"><p class="text-xl font-bold text-emerald-400">${score}</p><p class="text-[11px] text-zinc-400">Fluidez</p></div>
+      <div class="rounded-xl bg-white/5 py-2"><p class="text-xl font-bold text-violet-300">${s.turns}</p><p class="text-[11px] text-zinc-400">Turnos</p></div>
+      <div class="rounded-xl bg-white/5 py-2"><p class="text-xl font-bold text-amber-300">${s.tips}</p><p class="text-[11px] text-zinc-400">Tips</p></div>
+    </div>
+    <div class="mt-4 flex gap-2">
+      <button type="button" data-again class="flex-1 rounded-xl border border-white/10 bg-white/5 py-2.5 text-sm font-semibold transition hover:bg-white/10">↻ Repetir</button>
+      <button type="button" data-next class="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-500">${SCENARIOS[nextId].emoji} Siguiente</button>
+    </div>`;
+  el.querySelector('[data-again]').onclick = startConversation;
+  el.querySelector('[data-next]').onclick = () => selectScenario(nextId);
+  chat.appendChild(el); scrollDown();
+}
+
+/* ---------------------------------------------------------------
+   9. UI: escenarios, progreso, micrófono, feedback, pistas, toast
+   --------------------------------------------------------------- */
+function renderScenarioChips() {
+  const nav = $('scenarioList');
+  nav.innerHTML = '';
+  for (const [id, sc] of Object.entries(SCENARIOS)) {
+    const active = id === state.scenarioId;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `shrink-0 rounded-full border px-3.5 py-2 text-sm font-medium transition ${active
+      ? 'border-violet-500/60 bg-violet-500/15 text-violet-200 shadow-[0_0_20px_-6px_#8B5CF6]'
+      : 'border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-zinc-200'}`;
+    b.textContent = `${sc.emoji} ${sc.title}`;
+    b.onclick = () => selectScenario(id);
+    nav.appendChild(b);
+  }
+}
+
+function selectScenario(id) {
+  if (synth) synth.cancel();
+  stopListening();
+  hideFeedback();
+  state.scenarioId = id;
+  state.started = false; state.ended = false; state.nodeId = null;
+  document.body.classList.remove('your-turn');
+  const c = scenario().character;
+  $('charAvatar').textContent = c.emoji;
+  $('charName').textContent = c.name;
+  $('charStatusText').textContent = c.role;
+  renderScenarioChips();
+  renderIntro();
+  updateProgress();
+  setLive('Pulsa <b class="text-zinc-200">Empezar</b> para comenzar');
+}
+
+function updateProgress() {
+  const order = scenario().order;
+  const total = order.length - 1;
+  const idx = state.nodeId ? Math.max(0, order.indexOf(state.nodeId)) : 0;
+  const done = state.ended ? total : idx;
+  $('progressBar').style.width = `${state.started ? (done / total) * 100 : 0}%`;
+  $('stepLabel').textContent = state.ended ? '✅ Completado' : `Paso ${state.started ? idx + 1 : 0}/${total}`;
+}
+
+/** Cambia el aspecto del botón de micrófono y el estado del personaje. */
+function setMic(mode) {
+  state.mic = mode;
+  const btn = $('micBtn');
+  $('micWrap').classList.toggle('listening', mode === 'listening');
+  $('micIcon').classList.toggle('hidden', mode !== 'idle');
+  $('stopIcon').classList.toggle('hidden', mode !== 'listening');
+  $('waveIcon').classList.toggle('hidden', mode !== 'speaking');
+  btn.classList.toggle('from-violet-500', mode !== 'listening');
+  btn.classList.toggle('to-violet-700', mode !== 'listening');
+  btn.classList.toggle('from-emerald-400', mode === 'listening');
+  btn.classList.toggle('to-emerald-600', mode === 'listening');
+  btn.setAttribute('aria-label', mode === 'listening' ? 'Detener' : 'Hablar');
+  if (mode !== 'idle') document.body.classList.remove('your-turn');
+  const role = scenario().character.role;
+  $('charStatusText').textContent = mode === 'speaking' ? 'Hablando…' : mode === 'listening' ? 'Te está escuchando…' : role;
+}
+
+function setLive(html, highlight) {
+  const el = $('live');
+  el.innerHTML = html;
+  el.classList.toggle('text-emerald-300', !!highlight);
+  el.classList.toggle('text-zinc-400', !highlight);
+}
+
+/* --- Tarjeta de feedback --- */
+let fbTimer = null;
+function showFeedbackCard({ tone, title, bodyHTML, duration }) {
+  const card = $('feedback');
+  const tones = {
+    tip: ['border-amber-400/30', 'text-amber-200', 'bg-amber-400'],
+    style: ['border-violet-400/30', 'text-violet-200', 'bg-violet-400'],
+    praise: ['border-emerald-400/30', 'text-emerald-300', 'bg-emerald-400']
+  };
+  card.className = card.className.replace(/border-\S+\/30/g, '').trim();
+  card.classList.add(tones[tone][0]);
+  $('fbTitle').className = `text-sm font-bold ${tones[tone][1]}`;
+  $('fbTitle').textContent = title;
+  $('fbBody').innerHTML = bodyHTML;
+  const bar = $('fbTimer');
+  bar.className = `timer-bar h-0.5 ${tones[tone][2]}`;
+  bar.style.animation = 'none'; void bar.offsetWidth;
+  bar.style.animation = `shrink ${duration}ms linear forwards`;
+  card.classList.replace('sheet-hidden', 'sheet-shown');
+  clearTimeout(fbTimer);
+  fbTimer = setTimeout(hideFeedback, duration);
+  card.querySelectorAll('[data-say]').forEach((b) => { b.onclick = () => speak(b.dataset.say); });
+}
+function hideFeedback() { clearTimeout(fbTimer); $('feedback').classList.replace('sheet-shown', 'sheet-hidden'); }
+
+const escapeHTML = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function showCorrection(raw, issues) {
+  const main = issues[0];
+  const isStyle = main.kind === 'style';
+  const rightClean = main.right.replace(/…/g, '');
+  const body = `
+    <div class="flex items-start gap-2 rounded-xl bg-rose-500/10 px-3 py-2">
+      <span class="text-rose-300">✗</span>
+      <p class="text-zinc-300">${isStyle ? 'Dijiste' : 'En lugar de'}: <span class="${isStyle ? '' : 'line-through decoration-rose-400/70'}">“${escapeHTML(main.wrong)}”</span></p>
+    </div>
+    <div class="flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3 py-2">
+      <span class="text-emerald-300">✓</span>
+      <p class="flex-1 font-semibold text-emerald-200">${escapeHTML(main.right)}</p>
+      <button type="button" data-say="${escapeHTML(rightClean)}" class="rounded-lg px-1.5 py-0.5 hover:bg-white/10" aria-label="Escuchar">🔊</button>
+    </div>
+    <p class="text-[13px] leading-relaxed text-zinc-400">${main.tip}</p>
+    ${issues.length > 1 ? `<p class="text-xs text-zinc-500">+${issues.length - 1} sugerencia(s) más: ${issues.slice(1).map((i) => `<b class="text-zinc-300">${escapeHTML(i.right)}</b>`).join(', ')}</p>` : ''}`;
+  showFeedbackCard({ tone: isStyle ? 'style' : 'tip', title: isStyle ? '✨ Tip para sonar más natural' : '💡 Tip de corrección', bodyHTML: body, duration: 9000 });
+}
+
+function showPraise() {
+  const msg = PRAISES[Math.floor(Math.random() * PRAISES.length)];
+  showFeedbackCard({ tone: 'praise', title: msg, bodyHTML: '<p class="text-[13px] text-zinc-400">Usaste una expresión amable y natural. ¡Sigue así!</p>', duration: 3500 });
+}
+
+/* --- Hoja de pistas --- */
+function openHints() {
+  const overlay = $('hintOverlay');
+  const list = $('hintList');
+  list.innerHTML = '';
+  const n = state.started && !state.ended ? node() : null;
+
+  if (!n) {
+    $('hintQuestion').innerHTML = state.ended
+      ? '<p class="text-zinc-300">¡Ya terminaste esta conversación! 🎉 Prueba otro escenario o repítela.</p>'
+      : '<p class="text-zinc-300">Primero pulsa <b>▶ Empezar conversación</b>. El personaje te hablará y aquí verás ideas para responder.</p>';
+  } else {
+    $('hintQuestion').innerHTML = `<p class="text-xs font-semibold uppercase tracking-wider text-zinc-500">${escapeHTML(scenario().character.name)} pregunta</p>
+      <p class="mt-1 text-zinc-100"></p><p class="mt-1 text-sm italic text-zinc-400"></p>`;
+    const ps = $('hintQuestion').querySelectorAll('p');
+    ps[1].textContent = state.lastBot.en;
+    ps[2].textContent = state.lastBot.es;
+    for (const [en, es] of n.hints || []) {
+      const li = document.createElement('li');
+      li.className = 'flex items-center gap-3 rounded-xl border border-white/5 bg-white/5 px-3 py-2.5';
+      li.innerHTML = `<div class="min-w-0 flex-1"><p class="font-medium text-zinc-100"></p><p class="text-xs text-zinc-400"></p></div>
+        <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-500/15 text-emerald-300 transition hover:bg-emerald-500/25" aria-label="Escuchar">🔊</button>`;
+      li.querySelector('p').textContent = en;
+      li.querySelectorAll('p')[1].textContent = es;
+      li.querySelector('button').onclick = () => speak(en, { rate: 0.8 });
+      list.appendChild(li);
+    }
+  }
+  overlay.classList.replace('sheet-hidden', 'sheet-shown');
+}
+function closeHints() { $('hintOverlay').classList.replace('sheet-shown', 'sheet-hidden'); }
+
+/* --- Toast y banner --- */
+let toastTimer = null;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.replace('sheet-hidden', 'sheet-shown');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.replace('sheet-shown', 'sheet-hidden'), 3200);
+}
+function showBanner(html) { const b = $('banner'); b.innerHTML = html; b.classList.remove('hidden'); }
+
+function toggleKeyboard(force) {
+  const f = $('textForm');
+  const show = typeof force === 'boolean' ? force : f.classList.contains('hidden');
+  f.classList.toggle('hidden', !show);
+  f.classList.toggle('flex', show);
+  if (show) setTimeout(() => $('textInput').focus(), 50);
+}
+
+/* ---------------------------------------------------------------
+   10. EVENTOS
+   --------------------------------------------------------------- */
+$('micBtn').onclick = () => {
+  if (!state.started) { startConversation(); return; }   // el primer toque inicia (gesto de usuario para el audio)
+  if (state.ended) { toast('Conversación terminada · pulsa ↻ para repetir'); return; }
+  if (state.mic === 'listening') stopListening(); else startListening();
+};
+$('restartBtn').onclick = () => (state.started ? startConversation() : selectScenario(state.scenarioId));
+$('kbBtn').onclick = () => toggleKeyboard();
+$('hintBtn').onclick = openHints;
+$('hintClose').onclick = closeHints;
+$('hintOverlay').onclick = (e) => { if (e.target.id === 'hintOverlay') closeHints(); };
+$('fbClose').onclick = hideFeedback;
+$('chat').addEventListener('click', hideFeedback); // tocar el chat cierra la tarjeta para leer los mensajes
+$('slowBtn').onclick = (e) => {
+  state.slow = !state.slow;
+  const b = e.currentTarget;
+  b.setAttribute('aria-pressed', state.slow);
+  b.classList.toggle('border-emerald-500/50', state.slow);
+  b.classList.toggle('bg-emerald-500/15', state.slow);
+  b.classList.toggle('text-emerald-300', state.slow);
+  toast(state.slow ? '🐢 Modo lento activado' : '🐇 Velocidad normal');
+};
+$('textForm').onsubmit = (e) => {
+  e.preventDefault();
+  const v = $('textInput').value.trim();
+  if (!v) return;
+  $('textInput').value = '';
+  handleUserInput(v);
+};
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closeHints(); hideFeedback(); }
+});
+
+/* ---------------------------------------------------------------
+   11. ARRANQUE
+   --------------------------------------------------------------- */
+if (!SR) showUnsupported();
+if (!synth) showBanner('Tu navegador no puede leer texto en voz alta. Verás las respuestas escritas.');
+selectScenario('coffee');
+</script>
+</body>
+</html>
