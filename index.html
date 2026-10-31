@@ -6,6 +6,16 @@
   <meta name="theme-color" content="#09090b" />
   <title>LangLoop · AI Voice Simulator</title>
 
+  <!-- Aplica el tema guardado (o el del sistema) antes de pintar, para evitar parpadeos -->
+  <script>
+    (function () {
+      var t = null;
+      try { t = JSON.parse(localStorage.getItem('langloop.theme')); } catch (e) {}
+      if (!t) t = window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      if (t === 'light') document.documentElement.classList.add('light');
+    })();
+  </script>
+
   <!-- Tailwind CSS (Play CDN) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -114,6 +124,70 @@
     .sh-word { border-radius: .4rem; padding: 0 .1rem; transition: background-color .15s, color .15s; }
     .sh-word.active { background: rgba(139,92,246,.35); color: #fff; }
 
+    /* Palabras acentuadas del Shadowing (blancas en oscuro, casi negras en claro) */
+    .sh-stress { color: #fff; }
+
+    /* =====================================================================
+       MODO CLARO
+       Remapea las clases oscuras de Tailwind a equivalentes claros con buen
+       contraste: textos grises ≥ 4.5:1 y textos de color en tonos 700.
+       ===================================================================== */
+    html.light, html.light body { background: #f4f4f5; color-scheme: light; }
+    html.light .glow-bg::before { opacity: .18; }
+    html.light .glow-bg::after  { opacity: .12; }
+    html.light .thin-scroll::-webkit-scrollbar-thumb { background: #d4d4d8; }
+
+    /* Texto base y grises */
+    html.light body, html.light .text-zinc-100 { color: #18181b; }
+    html.light .text-zinc-200 { color: #27272a; }
+    html.light .text-zinc-300 { color: #3f3f46; }
+    html.light .text-zinc-400 { color: #52525b; }
+    html.light .text-zinc-500 { color: #6b6b74; }
+    html.light .placeholder-zinc-500::placeholder { color: #8a8a93; }
+    html.light .sh-stress { color: #18181b; }
+    html.light .hover\:text-white:hover, html.light .hover\:text-zinc-200:hover { color: #18181b; }
+
+    /* Textos de color: tonos claros → tonos oscuros legibles sobre blanco */
+    html.light .text-violet-200, html.light .text-violet-300, html.light .hover\:text-violet-300:hover { color: #6d28d9; }
+    html.light .text-emerald-200, html.light .text-emerald-300, html.light .text-emerald-400,
+    html.light .hover\:text-emerald-300:hover, html.light .hover\:text-emerald-400:hover { color: #047857; }
+    html.light .text-amber-200, html.light .text-amber-300 { color: #b45309; }
+    html.light .text-rose-300 { color: #be123c; }
+
+    /* Fondos de superficies */
+    html.light .bg-zinc-950\/70 { background-color: rgba(255,255,255,.78); }
+    html.light .bg-zinc-950\/80 { background-color: rgba(255,255,255,.9); }
+    html.light .bg-zinc-900, html.light .bg-zinc-900\/95, html.light .bg-zinc-900\/90 { background-color: #fff; }
+    html.light .bg-zinc-900\/70, html.light .bg-zinc-900\/60 { background-color: rgba(255,255,255,.85); }
+    html.light .bg-zinc-800 { background-color: #e4e4e7; }
+    html.light .bg-zinc-800\/80, html.light .bg-zinc-800\/60 { background-color: #f1f1f3; }
+    html.light .bg-zinc-800\/95 { background-color: #fff; }
+    html.light .hover\:bg-zinc-800:hover { background-color: #f4f4f5; }
+    html.light .bg-white\/5 { background-color: rgba(24,24,27,.045); }
+    html.light .hover\:bg-white\/5:hover { background-color: rgba(24,24,27,.06); }
+    html.light .hover\:bg-white\/10:hover { background-color: rgba(24,24,27,.09); }
+    html.light .bg-black\/60 { background-color: rgba(24,24,27,.35); }
+
+    /* Bordes, anillos y sombras */
+    html.light .border-white\/10 { border-color: rgba(24,24,27,.12); }
+    html.light .border-white\/5 { border-color: rgba(24,24,27,.09); }
+    html.light .ring-white\/10 { --tw-ring-color: rgba(24,24,27,.1); }
+    html.light .shadow-black\/40 { --tw-shadow-color: rgba(24,24,27,.1); }
+    html.light .md\:shadow-violet-950\/40 { --tw-shadow-color: rgba(139,92,246,.12); }
+
+    /* Degradados oscuros → claros; degradados de texto un poco más intensos */
+    html.light .from-zinc-900 { --tw-gradient-from: #fff var(--tw-gradient-from-position); --tw-gradient-to: rgb(255 255 255 / 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+    html.light .to-zinc-900\/40 { --tw-gradient-to: rgb(250 250 250 / .7) var(--tw-gradient-to-position); }
+    html.light .from-zinc-700 { --tw-gradient-from: #ececef var(--tw-gradient-from-position); --tw-gradient-to: rgb(236 236 239 / 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+    html.light .to-zinc-800 { --tw-gradient-to: #e4e4e7 var(--tw-gradient-to-position); }
+    html.light .bg-clip-text.from-violet-400 { --tw-gradient-from: #7c3aed var(--tw-gradient-from-position); --tw-gradient-to: rgb(124 58 237 / 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to); }
+    html.light .bg-clip-text.via-fuchsia-300 { --tw-gradient-to: rgb(192 38 211 / 0) var(--tw-gradient-to-position); --tw-gradient-stops: var(--tw-gradient-from), #c026d3 var(--tw-gradient-via-position), var(--tw-gradient-to); }
+    html.light .bg-clip-text.to-emerald-400 { --tw-gradient-to: #059669 var(--tw-gradient-to-position); }
+
+    /* Detalles propios */
+    html.light .sh-word.active { background: rgba(139,92,246,.18); color: #4c1d95; }
+    html.light .dot { background: #71717a; }
+
     /* Botón de grabar mientras graba */
     @keyframes recPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(244,63,94,.5); } 50% { box-shadow: 0 0 0 8px rgba(244,63,94,0); } }
     .is-recording { background-image: linear-gradient(to right, #f43f5e, #e11d48) !important; animation: recPulse 1.4s ease-in-out infinite; }
@@ -143,17 +217,25 @@
           </div>
           <div class="leading-tight">
             <h1 class="text-lg font-extrabold tracking-tight">Lang<span class="bg-gradient-to-r from-violet-400 to-emerald-400 bg-clip-text text-transparent">Loop</span></h1>
-            <span class="inline-flex items-center gap-1 rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-violet-300">
+            <span class="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-violet-300">
               <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> <span id="modeBadge">AI Voice Simulator</span>
             </span>
           </div>
         </div>
 
-        <!-- Modo lento: el personaje habla más despacio -->
-        <button id="slowBtn" type="button" aria-pressed="false" title="El nativo habla más despacio"
-          class="hidden items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-zinc-300 transition hover:bg-white/10">
-          🐢 <span>Lento</span>
-        </button>
+        <div class="flex items-center gap-2">
+          <!-- Modo lento: el personaje habla más despacio -->
+          <button id="slowBtn" type="button" aria-pressed="false" title="El nativo habla más despacio"
+            class="hidden items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-zinc-300 transition hover:bg-white/10">
+            🐢 <span>Lento</span>
+          </button>
+          <!-- Cambiar entre modo oscuro y claro -->
+          <button id="themeBtn" type="button" aria-label="Cambiar a modo claro" title="Cambiar tema"
+            class="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-white/5 text-zinc-300 transition hover:bg-white/10">
+            <svg id="themeSun" viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+            <svg id="themeMoon" viewBox="0 0 24 24" class="hidden h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
+        </div>
       </header>
 
       <!-- ================================================================
@@ -321,7 +403,7 @@
             <p id="shEs" class="mt-2 text-sm italic text-zinc-400"></p>
             <div class="mt-3 rounded-xl bg-white/5 px-3 py-2 text-xs leading-relaxed text-zinc-300">
               <p id="shTip"></p>
-              <p class="mt-1 text-zinc-500">Las palabras en <b class="text-white">blanco</b> llevan el acento (stress); las grises se dicen más rápido y suave.</p>
+              <p class="mt-1 text-zinc-500">Las palabras <b class="sh-stress">resaltadas</b> llevan el acento (stress); las grises se dicen más rápido y suave.</p>
             </div>
             <div class="mt-3 flex items-center justify-between text-xs font-medium">
               <button id="shPrev" type="button" class="rounded-lg px-2 py-1.5 text-zinc-400 transition hover:bg-white/5 hover:text-white">← Anterior</button>
@@ -1315,7 +1397,7 @@ function showScreen(name) {
   const home = name === 'home';
   $('backBtn').classList.toggle('hidden', home); $('backBtn').classList.toggle('grid', !home);
   $('slowBtn').classList.toggle('hidden', home); $('slowBtn').classList.toggle('flex', !home);
-  $('modeBadge').textContent = name === 'shadow' ? 'Shadowing Coach' : 'AI Voice Simulator';
+  $('modeBadge').textContent = name === 'shadow' ? 'Shadowing' : 'AI Voice Simulator';
   if (home) renderHomeStats();
   if (name === 'shadow') shEnter();
 }
@@ -1345,6 +1427,25 @@ function renderHomeStats() {
     tile(scores.length, 'Frases imitadas', 'text-emerald-400') +
     tile(scores.length ? `${avg}%` : '—', 'Match promedio', 'text-amber-300');
 }
+
+/* --- Tema claro / oscuro --- */
+const isLight = () => document.documentElement.classList.contains('light');
+function applyTheme(theme) {
+  const light = theme === 'light';
+  document.documentElement.classList.toggle('light', light);
+  $('themeSun').classList.toggle('hidden', light);     // en oscuro se muestra el sol (→ pasar a claro)
+  $('themeMoon').classList.toggle('hidden', !light);
+  $('themeBtn').setAttribute('aria-label', light ? 'Cambiar a modo oscuro' : 'Cambiar a modo claro');
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', light ? '#f4f4f5' : '#09090b');
+  const ring = document.getElementById('shRingTrack');
+  if (ring) ring.setAttribute('stroke', light ? '#e4e4e7' : '#27272a');
+}
+$('themeBtn').onclick = () => {
+  const next = isLight() ? 'dark' : 'light';
+  store.set('theme', next);
+  applyTheme(next);
+};
+applyTheme(isLight() ? 'light' : 'dark');
 
 $('backBtn').onclick = () => go('home');
 $('logoHome').onclick = () => go('home');
@@ -1468,7 +1569,7 @@ function shRenderPhrase() {
   SH.native.words.forEach((w, i) => {
     const span = document.createElement('span');
     const stressed = !FUNCTION_WORDS.has(w.toLowerCase().replace(/[^a-z]/g, ''));
-    span.className = `sh-word ${stressed ? 'text-white' : 'text-zinc-500'}`;
+    span.className = `sh-word ${stressed ? 'sh-stress' : 'text-zinc-500'}`;
     span.dataset.i = i;
     span.textContent = w;
     el.appendChild(span);
@@ -1759,7 +1860,7 @@ function shRenderResult(isRecord) {
     <div class="flex items-center gap-4">
       <div class="relative h-24 w-24 shrink-0">
         <svg viewBox="0 0 100 100" class="h-full w-full -rotate-90">
-          <circle cx="50" cy="50" r="40" fill="none" stroke="#27272a" stroke-width="9"/>
+          <circle id="shRingTrack" cx="50" cy="50" r="40" fill="none" stroke="${isLight() ? '#e4e4e7' : '#27272a'}" stroke-width="9"/>
           <circle id="shRing" cx="50" cy="50" r="40" fill="none" stroke="${color}" stroke-width="9" stroke-linecap="round"
             stroke-dasharray="${C}" stroke-dashoffset="${C}" style="transition: stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1)"/>
         </svg>
@@ -1818,8 +1919,19 @@ function drawEnvelope(ctx, arr, w, mid, amp, fill, stroke, upto = 1) {
   if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke(); }
 }
 
+/** Colores de la onda según el tema (en claro, tonos más oscuros para que se vean sobre blanco). */
+const SH_PALETTE = {
+  dark: { grid: 'rgba(255,255,255,.06)', faintFill: 'rgba(139,92,246,.10)', faintStroke: 'rgba(139,92,246,.25)',
+          natFill: 'rgba(139,92,246,.28)', natStroke: 'rgba(167,139,250,.8)', litFill: 'rgba(139,92,246,.45)', litStroke: '#a78bfa',
+          playhead: '#c4b5fd', userBars: 'rgba(16,185,129,.35)', user: '#34d399', userFill: 'rgba(16,185,129,.12)', glow: '#10B981' },
+  light: { grid: 'rgba(24,24,27,.08)', faintFill: 'rgba(139,92,246,.08)', faintStroke: 'rgba(124,58,237,.3)',
+          natFill: 'rgba(139,92,246,.16)', natStroke: 'rgba(109,40,217,.65)', litFill: 'rgba(139,92,246,.32)', litStroke: '#6d28d9',
+          playhead: '#6d28d9', userBars: 'rgba(5,150,105,.35)', user: '#059669', userFill: 'rgba(16,185,129,.14)', glow: 'rgba(16,185,129,.45)' }
+};
+
 function shLoop() {
   SH.raf = requestAnimationFrame(shLoop);
+  const P = SH_PALETTE[isLight() ? 'light' : 'dark'];
   const c = $('shCanvas');
   const dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
   if (!w || !h) return;
@@ -1830,7 +1942,7 @@ function shLoop() {
   const mid = h / 2, amp = h * 0.42, now = performance.now();
 
   // Línea central
-  ctx.strokeStyle = 'rgba(255,255,255,.06)'; ctx.lineWidth = 1;
+  ctx.strokeStyle = P.grid; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0, mid); ctx.lineTo(w, mid); ctx.stroke();
   if (!SH.native) return;
 
@@ -1842,18 +1954,18 @@ function shLoop() {
     const t = (now - SH.recStart) / 1000;
     $('shTimer').textContent = `${t.toFixed(1)}s`;
     // Nativo de fondo, tenue
-    drawEnvelope(ctx, SH.native.env, w, mid, amp, 'rgba(139,92,246,.10)', 'rgba(139,92,246,.25)');
+    drawEnvelope(ctx, SH.native.env, w, mid, amp, P.faintFill, P.faintStroke);
     // Energía del usuario en el tiempo
     const span = Math.max(expected * 1.5, t + 0.5);
-    ctx.fillStyle = 'rgba(16,185,129,.35)';
+    ctx.fillStyle = P.userBars;
     for (const e of SH.env) {
       const x = (e.t / span) * w, v = Math.min(1, e.v * 6) * amp;
       ctx.fillRect(x, mid - v, Math.max(1.5, w / 400), v * 2);
     }
     // Osciloscopio en vivo (forma de onda real del micrófono)
     ctx.save();
-    ctx.shadowColor = '#10B981'; ctx.shadowBlur = 12;
-    ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2;
+    ctx.shadowColor = P.glow; ctx.shadowBlur = 12;
+    ctx.strokeStyle = P.user; ctx.lineWidth = 2;
     ctx.beginPath();
     const step = Math.ceil(SH.buf.length / w);
     for (let i = 0, x = 0; i < SH.buf.length; i += step, x++) {
@@ -1868,23 +1980,23 @@ function shLoop() {
   // Nativo (violeta). Mientras habla, se ilumina hasta la posición estimada.
   if (SH.nativePlaying) {
     const prog = Math.min(1, (now - SH.playStart) / 1000 / (expected / SH.playRate));
-    drawEnvelope(ctx, SH.native.env, w, mid, amp, 'rgba(139,92,246,.12)', 'rgba(139,92,246,.3)');
-    drawEnvelope(ctx, SH.native.env, w, mid, amp, 'rgba(139,92,246,.45)', '#a78bfa', prog);
-    ctx.fillStyle = '#c4b5fd'; ctx.fillRect(prog * w - 1, 4, 2, h - 8);
+    drawEnvelope(ctx, SH.native.env, w, mid, amp, P.faintFill, P.faintStroke);
+    drawEnvelope(ctx, SH.native.env, w, mid, amp, P.litFill, P.litStroke, prog);
+    ctx.fillStyle = P.playhead; ctx.fillRect(prog * w - 1, 4, 2, h - 8);
     if (!SH.gotBoundary) {     // sin eventos de palabra: resaltado estimado por tiempo
       const i = SH.native.spans.findIndex((s) => prog >= s.start && prog <= s.end);
       if (i >= 0) highlightWord(i);
     }
   } else {
     const breathe = SH.userEnv ? 1 : 0.92 + 0.08 * Math.sin(now / 700);
-    drawEnvelope(ctx, SH.native.env.map((v) => v * breathe), w, mid, amp, 'rgba(139,92,246,.28)', 'rgba(167,139,250,.8)');
+    drawEnvelope(ctx, SH.native.env.map((v) => v * breathe), w, mid, amp, P.natFill, P.natStroke);
   }
 
   // Comparación con la voz del usuario (verde)
   if (SH.userEnv) {
     ctx.save();
-    ctx.shadowColor = '#10B981'; ctx.shadowBlur = 8;
-    drawEnvelope(ctx, SH.userEnv, w, mid, amp, 'rgba(16,185,129,.12)', '#34d399');
+    ctx.shadowColor = P.glow; ctx.shadowBlur = 8;
+    drawEnvelope(ctx, SH.userEnv, w, mid, amp, P.userFill, P.user);
     ctx.restore();
   }
 }
